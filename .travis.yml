@@ -45,6 +45,7 @@ before_install:
 - |
   export LINUX64_STACK="https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-linux-x86_64.tar.gz"
   travis_retry curl -L "${LINUX64_STACK}" | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+  rm -rf /home/travis/.stack/setup-exe-cache/
   stack setup $GHC_VER
 
   # Use the more reliable S3 mirror of Hackage
@@ -81,7 +82,8 @@ script:
   set -ex
   case "$BUILD" in
     stack)
-      stack --stack-yaml="stack-${GHC_VER}.yaml" build
+      stack --stack-yaml="stack-${GHC_VER}.yaml" build --dependencies-only
+      echo stack --stack-yaml="stack-${GHC_VER}.yaml" build
       echo make hie-8.4.4
       echo make build-doc-8.4.4
       ;;
