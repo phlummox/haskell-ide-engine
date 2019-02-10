@@ -31,7 +31,7 @@ matrix:
 # use this one for github release
   - env: BUILD=stack RELEASE="true" GHC_VER="8.4.4" 
     compiler: ": #stack ghc-8.4.4"
-    addons: {apt: {packages: [libgmp-dev,cabal-install-1.22,ghc-7.10.3, libicu-dev, libtinfo-dev], sources: [hvr-ghc]}}
+    addons: {apt: {packages: [libgmp-dev, libicu-dev, libtinfo-dev], sources: [hvr-ghc]}}
 
 
 
@@ -63,7 +63,7 @@ install:
   set -ex
   case "$BUILD" in
     stack)
-      stack --no-terminal --install-ghc $ARGS test $PKG_FLAGS --bench --only-dependencies
+      stack --version
       ;;
     cabal)
       # Get the list of packages from the stack.yaml file
@@ -81,7 +81,7 @@ script:
   case "$BUILD" in
     stack)
       make hie-8.6.3
-      make build-doc-8.6.3
+      echo make build-doc-8.6.3
       ;;
   esac
   set +ex
