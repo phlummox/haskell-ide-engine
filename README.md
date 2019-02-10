@@ -13,6 +13,8 @@
 [appveyor]: https://ci.appveyor.com/project/Bubba/haskell-ide-engine-74xec
 
 
+[![travis Build Status](https://img.shields.io/travis/phlummox/haskell-ide-engine.svg?label=Linux%20build)](https://travis-ci.org/phlummox/haskell-ide-engine) 
+
 This project aims to be __the universal interface__ to __a growing number of Haskell tools__, providing a __full-featured and easy to query backend__ for editors and IDEs that require Haskell-specific functionality.
 
 __We are currently focusing on using the [Language Server Protocol](https://github.com/Microsoft/language-server-protocol/blob/master/protocol.md) as the interface via which
