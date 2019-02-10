@@ -56,12 +56,9 @@ before_install:
     echo 'jobs: $ncpus' >> $HOME/.cabal/config
   fi
 - stack --version
-- cabal --version
-- ghc --version
+
 
 install:
-- echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
-- if [ -f configure.ac ]; then autoreconf -i; fi
 - |
   set -ex
   case "$BUILD" in
