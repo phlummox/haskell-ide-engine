@@ -1,18 +1,16 @@
+
+# Use new container infrastructure to enable caching
 sudo: false
-language: c
-os: osx
 
-addons:
-  homebrew:
-    packages:
-    - z3
-    - stack
-    - upx
+# Do not choose a language; we provide our own build tools.
+language: generic
 
+# Caching so the next build will be fast too.
 cache:
   directories:
+  - $HOME/.ghc
+  - $HOME/.cabal
   - $HOME/.stack
-  - $HOME/.cabal/
   - $TRAVIS_BUILD_DIR/.stack-work
   - $TRAVIS_BUILD_DIR/submodules/brittany/.stack-work
   - $TRAVIS_BUILD_DIR/submodules/HaRe/.stack-work
@@ -26,117 +24,97 @@ cache:
 before_cache:
   - rm -rf $TRAVIS_BUILD_DIR/.stack-work/logs/
 
-stages:
-  - setup
-  - dependencies
-  - test
-  - deploy
+matrix:
+  include:
+  # Stack builds. Can pass in arbitrary Stack arguments via the ARGS
+  # variable, such as using --stack-yaml to point to a different file.
+# use this one for github release
+  - env: BUILD=stack RELEASE="true" GHC_VER="8.4.4" 
+    compiler: ": #stack ghc-8.4.4"
+    addons: {apt: {packages: [libgmp-dev,cabal-install-1.22,ghc-7.10.3, libicu-dev, libtinfo-dev], sources: [hvr-ghc]}}
 
-jobs:
-   include:
-     - stage: setup
-       env: GHC_VER="8.4.4"
-       script: &setup
-         - ls .stack-work/install/*/*/*/bin/hie || true
-         - travis_retry stack --no-terminal --install-ghc --stack-yaml=stack-$GHC_VER.yaml setup
-         # Build a big package to offload the next stage from doing too much work
-         - stack --stack-yaml=stack-$GHC_VER.yaml build lens
 
-     - stage: setup
-       env: GHC_VER="8.4.3"
-       script: *setup
 
-     - stage: setup
-       env: GHC_VER="8.4.2"
-       script: *setup
+before_install:
+# Using compiler above sets CC to an invalid value, so unset it
+- unset CC
+# Download and unpack the stack executable
+- export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:/opt/alex/$ALEXVER/bin:/opt/happy/$HAPPYVER/bin:$HOME/.cabal/bin:$PATH
+- mkdir -p ~/.local/bin
+- |
+  export LINUX64_STACK="https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-linux-x86_64.tar.gz"
+  travis_retry curl -L "${LINUX64_STACK}" | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+    stack setup
 
-     - stage: setup
-       env: GHC_VER="8.2.2"
-       script: *setup
+  # Use the more reliable S3 mirror of Hackage
+  mkdir -p $HOME/.cabal
+  echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
+  echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
 
-     - stage: setup
-       env: GHC_VER="8.2.1"
-       script: *setup
+  if [ "$CABALVER" != "1.16" ]
+  then
+    echo 'jobs: $ncpus' >> $HOME/.cabal/config
+  fi
+- stack --version
+- cabal --version
+- ghc --version
 
-     - stage: dependencies
-       env: GHC_VER="8.4.4"
-       script: &dependencies
-         - travis_retry stack --no-terminal --install-ghc --stack-yaml=stack-$GHC_VER.yaml build --only-dependencies
+install:
+- echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+- if [ -f configure.ac ]; then autoreconf -i; fi
+- |
+  set -ex
+  case "$BUILD" in
+    stack)
+      stack --no-terminal --install-ghc $ARGS test $PKG_FLAGS --bench --only-dependencies
+      ;;
+    cabal)
+      # Get the list of packages from the stack.yaml file
+      PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
 
-     - stage: dependencies
-       env: GHC_VER="8.4.3"
-       script: *dependencies
+      cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      ;;
+  esac
+  set +ex
 
-     - stage: dependencies
-       env: GHC_VER="8.4.2"
-       script: *dependencies
 
-     - stage: dependencies
-       env: GHC_VER="8.2.2"
-       script: *dependencies
+script:
+- |
+  set -ex
+  case "$BUILD" in
+    stack)
+      make hie-8.6.3
+      make build-doc-8.6.3
+      ;;
+  esac
+  set +ex
 
-     - stage: dependencies
-       env: GHC_VER="8.2.1"
-       script: *dependencies
-
-     - stage: test
-       env: GHC_VER="8.4.4"
-       script: &test
-         - stack --no-terminal --stack-yaml=stack-$GHC_VER.yaml install
-
-     - stage: test
-       env: GHC_VER="8.4.3"
-       script: *test
-
-     - stage: test
-       env: GHC_VER="8.4.2"
-       script: *test
-
-     - stage: test
-       env: GHC_VER="8.2.2"
-       script: *test
-
-     - stage: test
-       env: GHC_VER="8.2.1"
-       script: *test
-
-     - stage: deploy
-       env: GHC_VER="8.4.4"
-       script: &deploy
-         - mkdir -p $HOME/hie-macos
-         - cp .stack-work/install/*/*/$GHC_VER/bin/hie $HOME/hie-macos
-         - cp .stack-work/install/*/*/$GHC_VER/bin/hie-wrapper $HOME/hie-macos
-         - upx --best $HOME/hie-macos/hie
-         - upx --best $HOME/hie-macos/hie-wrapper
-         - tar czf "hie-$GHC_VER-Darwin.tar.gz" $HOME/hie-macos
-       deploy: &upload
-         provider: releases
-         api_key:
-           secure: K12xUSzK+VWpnS4gRo04rJjfi71sBi0zuMWKmAcsK1igvmdbsEjyuyX4SxFI58/sM4x5qlyXg/nWSPfECKjpQS7/Q/GG1ub+AjU9kq5iyiWACWjXpDLN9Jz9iLBceyPLaf3y3rswri45v7LdwvMNwSI/wYNKEz97IfJ3VkCR16kWv/cqHGdJUYWZk7lBJX/BL94Bof4zOoXwSiy0GbaSCptcSHm1qwtN1qYsYnmihgLYR0RtLRz6tvBPHmqDjsWAXMDhaEyi0zfZ06igITkm7E4at+c3/wssYfgSg15AT2fd5T+v9keyzyanBzGh9xHYcMmflIA9dAvQawl/vw8sGsnQRaddhmTd0bqKFrtrnMO5dRsbkIyu1r178BQCJVjvy5KqyVpXy1ycDcO17E5qONVr2V838x6eg9uPJBNGR30XMg3ZF+GPsbz0xhzxf2Hhab82pJ+lAAsBlnaPdDNVchs/wjEFMp94hcL+IL4ydaXk91piPVhs3VPsLfGboQ72sUnyPUI2aiKfkk5P4Xug+2UqbX17fXfLgnkRbfyCd/4IeM4IwHgRAKa3tT7017KGSZBShihqe2dDJBjS8MlIxDD+U69HR2TIkAJaDnJe+UFAndoc8w4Ajd2OJ1/C+ey236SZq9R7D3dqyFi6Sxc1kSpNguVmjjvlEUk/Jpz1ckA=
-         file:
-           - "hie-$GHC_VER-Darwin.tar.gz"
-         skip_cleanup: true
-         draft: true
-         tag_name: "${TRAVIS_TAG}"
-         on:
-          tags: true
-
-     - stage: deploy
-       env: GHC_VER="8.4.3"
-       script: *deploy
-       deploy: *upload
-
-     - stage: deploy
-       env: GHC_VER="8.4.2"
-       script: *deploy
-       deploy: *upload
-
-     - stage: deploy
-       env: GHC_VER="8.2.2"
-       script: *deploy
-       deploy: *upload
-
-     - stage: deploy
-       env: GHC_VER="8.2.1"
-       script: *deploy
-       deploy: *upload
+#before_deploy:
+#- PKGVER=$(cabal info . | head -n  1 | cut -d ' ' -f 2)
+#- SRC_TGZ=$PKGVER.tar.gz
+#- |
+#  if [ ! -f "$SRC_TGZ" ] ; then
+#    stack sdist;
+#    distdir=`stack path --dist-dir`; 
+#    cp $distdir/$SRC_TGZ .;
+#  fi
+#- ls -al "$SRC_TGZ"; true
+#- cp ~/.local/bin/hup .
+#- tar cf hup_x86_64.tgz --gzip hup
+#- ls -al hup_x86_64.tgz
+#
+#
+#deploy:
+#  provider: releases
+#  file: 
+#  - "$SRC_TGZ"
+#  - hup_x86_64.tgz
+#  skip_cleanup: true
+#  # overwrite: true
+#  api_key:
+#    secure: RzlHVrVLGvb8Or+PLzfdUF6YFIFU65xqZ3hl8TodglRnA8avcfej/W/K/aaXKb+i9eL4lmbc8WtTR5Qm8CxNtlR/uPAC1LBEVhJQHBKn6n1/uRTMOaRs75UjsIcm3GQKuOWI0HpMvb8Px7LBqdlE6wJURvqBTqkbomO6OMl8I2gMO0rYYP/ylf5e9Ozl0AzMWqzjwrA3brw6CTPWcup8s4GwHnsdisxrQDkE1ltt5P+MluJGKbQ4PDHrINOnUXSL/lcvUHc4i5clAqO7Baff0QCdl/RBxML5/fDB/OHuJpDu3GRXcWloQReu1gw3zuVaT9yA5JZvf4XQy2fnFNZUDbeNlM4L1tt19JOvLTzBPrr/KchxJ3aKW8L9z0dpMQ1sxE77VyJ+Bpg68k9pzBGcZ8XO0kraS1ZuAdP5LyuOnxOusG6vJA+MRSh+3kmeuOsqi0xVlrr89RiuIwFTG2fegDj5+PH6MTOnEJlfKHmK4pEB+NSSfVvmX8JBOlTg6v/HJpiMxGxpdkrvAC6Adb+gm1M6f5eZrPU3R0AFmDQ1me9HVCg2cL3l4lMgn88OUkRy79ipPPajLZ/CpE/+6j3Gau3XuZbg8LbH3Vo72KSeWaqPo9wge2/poeqfPYBvj+GGAR0GihAOJLvOldX1+VMQd6GWpTp16W2hA7XePxOIQkI=
+#  on:
+#    tags: true
+#    all_branches: true
+#    repo: phlummox/hup
+#    condition: $RELEASE = true
