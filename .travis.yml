@@ -11,6 +11,7 @@ cache:
   - $HOME/.ghc
   - $HOME/.cabal
   - $HOME/.stack
+  - $HOME/.local/bin
   - $TRAVIS_BUILD_DIR/.stack-work
   - $TRAVIS_BUILD_DIR/submodules/brittany/.stack-work
   - $TRAVIS_BUILD_DIR/submodules/HaRe/.stack-work
@@ -39,12 +40,12 @@ before_install:
 # Using compiler above sets CC to an invalid value, so unset it
 - unset CC
 # Download and unpack the stack executable
-- export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:/opt/alex/$ALEXVER/bin:/opt/happy/$HAPPYVER/bin:$HOME/.cabal/bin:$PATH
+- export PATH=/opt/ghc/$GHC_VER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:/opt/alex/$ALEXVER/bin:/opt/happy/$HAPPYVER/bin:$HOME/.cabal/bin:$PATH
 - mkdir -p ~/.local/bin
 - |
   export LINUX64_STACK="https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-linux-x86_64.tar.gz"
   travis_retry curl -L "${LINUX64_STACK}" | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-    stack setup
+  stack setup $GHC_VER
 
   # Use the more reliable S3 mirror of Hackage
   mkdir -p $HOME/.cabal
@@ -64,12 +65,12 @@ install:
   case "$BUILD" in
     stack)
       stack --version
+      make submodules
+      make cabal
+      stack --stack-yaml="stack-${GHC_VER}.yaml" install happy
       ;;
     cabal)
-      # Get the list of packages from the stack.yaml file
-      PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
-
-      cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      echo NOT DOING CABAL
       ;;
   esac
   set +ex
@@ -80,8 +81,8 @@ script:
   set -ex
   case "$BUILD" in
     stack)
-      make hie-8.6.3
-      echo make build-doc-8.6.3
+      echo make hie-8.4.4
+      echo make build-doc-8.4.4
       ;;
   esac
   set +ex
