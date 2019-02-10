@@ -81,6 +81,7 @@ script:
   set -ex
   case "$BUILD" in
     stack)
+      stack --stack-yaml="stack-${GHC_VER}.yaml" build
       echo make hie-8.4.4
       echo make build-doc-8.4.4
       ;;
