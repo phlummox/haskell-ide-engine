@@ -85,7 +85,7 @@ script:
       rm -rf /home/travis/.stack/setup-exe-cache
       stack --stack-yaml="stack-${GHC_VER}.yaml" build lens aeson blaze-builder  blaze-markup haskell-lexer cryptonite microlens megaparsec attoparsec microlens-th utility-ht
       stack --stack-yaml="stack-${GHC_VER}.yaml" build --dependencies-only
-      stack --stack-yaml="stack-${GHC_VER}.yaml" build
+      stack --stack-yaml="stack-${GHC_VER}.yaml" build --verbose --cabal-verbose
       echo make hie-8.4.4
       echo make build-doc-8.4.4
       ;;
